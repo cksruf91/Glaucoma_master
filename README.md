@@ -1,6 +1,7 @@
-# tensorflow_project
+# Glaucoma_master
 
 ## meta
+- window 10 
 - Python 3.6.8
 - conda 4.6.14
 - tensorflow-gpu 1.13.1
@@ -9,7 +10,7 @@
 
 ## create train dataset
 
- - *PROJECT_LOCATION\\dataset\\cifar10\\image\\*
+ - *PROJECT_LOCATION\\dataset\\~~*
 
 ```sh
 python utils/tfrecord_util.py

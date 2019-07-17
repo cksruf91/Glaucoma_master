@@ -1,0 +1,8 @@
+numpy
+sklearn
+tensorflow==1.14.0
+seaborn
+scikit-image
+slacker
+matplotlib
+keras

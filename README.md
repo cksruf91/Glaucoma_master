@@ -8,6 +8,13 @@
 - CUDA 9.0
 - NVIDIA cuDNN v7.5.0 (Feb 21, 2019), for CUDA 9.0
 
+## Install
+Ensure you a version of Python in the 2.7-3.6 range installed, then run:
+
+    pip install -r requirements.txt
+
+You will also need OpenCV.
+
 ## create train dataset
 
  - *PROJECT_LOCATION\\dataset\\~~*

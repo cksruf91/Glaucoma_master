@@ -31,28 +31,15 @@ interface
 python mack_gen.py --m 1 --im {image or masking file to modify}
 ```
 
-1. Unet 학습용 tfrecode 생성
-```sh
-python seg_tfrecord_util.py
-```
-
 1. Unet 학습
 ```sh
 python train_segmentation.py 
 ```
 
-1. 학습된  Unet으로 masking 생성
-```sh
-python masking_generator.py
-```
+TODO: 학습된  Unet으로 masking 생성
 
-
-### model 학습용 tfrecode 파일 생성
-```sh
-python utils/tfrecord_util.py
-```
 
 ## train model
 ```sh
-python train.py
+python train_keras.py
 ```

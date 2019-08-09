@@ -1,16 +1,23 @@
 import pandas as pd
 import numpy as np
+from slacker import Slacker
 
 from keras.callbacks import Callback
+import keras.backend as K
 
 from sklearn import metrics
-from sklearn.metrics import confusion_matrix
-from utils.util import train_progressbar, slack_message, learning_rate_schedule, print_confusion_matrix
+from sklearn.metrics import confusion_matrix, mean_squared_error
+from utils.util import slack_message, print_confusion_matrix
 
 def binary_cross_entropy(y_true, y_pred):
     loss= []
+    if isinstance(y_true,np.ndarray):
+        y_true = y_true.flatten()
+        y_pred = y_pred.flatten()
+    
     for t,p in zip(y_true,y_pred):
-        cross_entropy = np.float( t*np.log(p) + (1-t)*np.log((1-p)) )
+        p = np.clip(p, 0.+K.epsilon(), 1.-K.epsilon())
+        cross_entropy = np.float( t*np.log(p) + (1-t)*np.log((1-(p+K.epsilon()))) )
         loss.append(cross_entropy)
     return -np.mean(loss)
 
@@ -18,15 +25,43 @@ def auc_function(y_true, y_pred):
     fpr, tpr, thresholds = metrics.roc_curve(y_true, y_pred, pos_label=1)
     return metrics.auc(fpr, tpr) 
 
+def hinge_function(y_true, y_pred):
+    y_true_ = np.copy(y_true)
+    y_true_[y_true_==0] = -1
+    zeros = np.zeros(y_true_.shape)
+    hinge_loss=np.maximum(zeros,(1- y_true_*y_pred))
+    return np.mean(hinge_loss)
+    
+    
+class SlackMessage(Callback):
+    def __init__(self , slack_token,monitor_name):
+        self.slack_token = slack_token
+        self.monitor_name = monitor_name
+
+    def on_train_begin(self, logs={}):
+        pass
+
+    def on_epoch_end(self,epoch, logs={}):
+        moniter = 'mean_squared_error' if self.monitor_name == 'mse' else self.monitor_name
+        #self.logs.append(logs)
+        self.losses = logs.get('loss')
+        self.monitor = logs.get(moniter)
+        self.val_losses = logs.get('val_loss')
+        self.val_monitor = logs.get('val_'+self.monitor_name)
+        message = f"epoch : {epoch+1} | loss : {self.losses:.5f}, {moniter} : {self.monitor:.5f}, val_loss : {self.val_losses:.5f}, {'val_'+self.monitor_name} : {self.val_monitor:.5f}"
+        slack_message('#glaucoma', message, self.slack_token)
+
 class IntervalEvaluation(Callback):
     """ 매 epoch 마다 loss 와 지정된 monitoring method 기록
     
     Arguments:
         Callback {class} -- keras api
     """
-    def __init__(self , val_generator,monitor_name='auc'):
+    def __init__(self , val_generator,loss_func,monitor_name='auc'):
         self.val_generator = val_generator
         self.monitor_name = monitor_name
+        self.loss_func = loss_func
+        self.y_true = val_generator.get_label()
 
     def on_train_begin(self, logs={}):
         self.losses = []
@@ -35,22 +70,31 @@ class IntervalEvaluation(Callback):
         y_pred = self.model.predict_generator(self.val_generator,
                                             steps=None,
                                             max_queue_size=10,
-                                            workers=1,
+                                            workers=2,
                                             use_multiprocessing=False,
                                             verbose=0
                                              )
-        y_true = self.val_generator.get_label()
-        loss = binary_cross_entropy(y_true, y_pred)
-        if self.monitor_name == 'auc':
-            monitor = auc_function(y_true, y_pred)
+        if self.loss_func == 'binary_crossentropy':
+            loss = binary_cross_entropy(self.y_true, y_pred)
+        elif self.loss_func == 'hinge':
+            loss = hinge_function(self.y_true, y_pred)
         else :
-            raise ValueError("invalied monitor")
+            raise ValueError("unavailable loss function")
+        
+        if self.monitor_name == 'auc':
+            monitor = auc_function(self.y_true, y_pred)
+        elif self.monitor_name == 'mse':
+            y_true = self.y_true.flatten()
+            y_pred = y_pred.flatten()
+            monitor = mean_squared_error(self.y_true, y_pred)
+        else :
+            raise ValueError("unavailable monitor method")
         
         logs['val_loss']  = loss
         logs[f'val_{self.monitor_name}']  = monitor
         
         print(f" - val_loss : {loss}  - val_{self.monitor_name} : {monitor}")
-        print_confusion_matrix(y_true, y_pred,0.5)
+        print_confusion_matrix(self.y_true, y_pred,0.5)
         
         
 class HistoryCheckpoint(Callback):
@@ -59,29 +103,26 @@ class HistoryCheckpoint(Callback):
     Arguments:
         Callback {class} -- keras api
     """
-    def __init__(self , path, metrics_name):
+    def __init__(self , path, monitor_name):
         self.path = path
-        self.metrics_name = metrics_name
+        self.monitor_name = monitor_name
 
     def on_train_begin(self, logs={}):
-        self.losses = []
-        self.metrics = []
-        self.val_losses = []
-        self.val_metrics = []
         self.logs = []
 
     def on_epoch_end(self,epoch, logs={}):
+        moniter = 'mean_squared_error' if self.monitor_name == 'mse' else self.monitor_name
         self.logs.append(logs)
-        self.losses.append(logs.get('loss'))
-        self.metrics.append(logs.get(str(self.metrics_name)))
-        self.val_losses.append(logs.get('val_loss'))
-        self.val_metrics.append(logs.get(str('val_'+self.metrics_name)))
-
-        hist = pd.DataFrame({
-            'losses' : self.losses
-            ,self.metrics_name : self.metrics
-            ,'val_losses' : self.val_losses
-            ,'val_'+self.metrics_name : self.val_metrics
-            })
+        self.losses = logs.get('loss')
+        self.monitor = logs.get(moniter)
+        self.val_losses = logs.get('val_loss')
+        self.val_monitor = logs.get('val_'+self.monitor_name)
         
-        hist.to_csv(self.path)
+        if epoch == 0:
+            with open(self.path , 'w') as f:
+                line = f"epoch,loss,{self.monitor_name},val_loss,{'val_'+self.monitor_name}" 
+                f.write(line+'\n')
+        with open(self.path , 'a') as f:
+            line = f"{epoch+1},{self.losses},{self.monitor},{self.val_losses},{self.val_monitor}" 
+            f.write(line+'\n')
+    

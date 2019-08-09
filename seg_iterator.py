@@ -1,44 +1,20 @@
 import sys
 import numpy as np
 import cv2
-from config import *
+import random
+import keras
+import warnings
 import skimage
 from skimage.exposure import equalize_adapthist, adjust_gamma
 from skimage.transform import rescale, resize, downscale_local_mean, rotate
-import random
 
+from config import *
+from utils.image_util import image_loader, resize_image, image_rotate, random_gamma, Adaptive_Histogram_Equalization, random_flip_image, normalize_img, crop_optic_disk
+from utils.util import print_progress
 
-def image_loader(f):
-    return skimage.io.imread(f)
+warnings.filterwarnings(action='ignore') 
 
-def resize_image(img,shape):
-    img = resize(img,shape)
-    #img = cv2.resize(img, dsize=shape, interpolation=cv2.INTER_AREA)
-    return img
-
-def Adaptive_Histogram_Equalization(img):
-    #clahe = cv2.createCLAHE(clipLimit=1, tileGridSize=(8,8))
-    #for i in range(3):
-    #    ch = img[:,:,i]
-    #    ch = clahe.apply(ch)
-    #    img[:,:,i] = ch
-    #img = img.astype(np.uint6)
-    return equalize_adapthist(img)
-
-def random_gamma(f):
-    gamma = random.uniform(0.5,1.5)
-    gain = random.uniform(0.5,1.5)
-    return adjust_gamma(f,gamma, gain)
-
-def print_progress(total,i):
-    dot_num = int(i/total*100)
-    dot = '>'*dot_num
-    empty = '_'*(100-dot_num)
-    sys.stdout.write(f'\r [{dot}{empty}] {i} Done')
-    if i == total:
-        sys.stdout.write('\n')
-
-class DataGenerator():
+class DataGenerator(keras.utils.Sequence):
     def __init__(self, image_dir, masking_dir, batch_size, shape, is_train= True, sample =None):
         self.image_dir = image_dir
         self.masking_dir = masking_dir
@@ -106,8 +82,20 @@ class DataGenerator():
     
     def argumentation(self,img,mask,is_train):
         img = Adaptive_Histogram_Equalization(img)
+        
         if is_train:
             img = random_gamma(img)
+            ## random한 각도로 image를 회전
+            angle = random.randint(1,35)*10
+            img = image_rotate(img, angle)
+            mask = image_rotate(mask, angle)
+            
+            ## 50% 확률로 image 뒤집기
+            h=random.choice([True,False])
+            v=random.choice([True,False])
+            img = random_flip_image(img,horizon=h,vertical=v)
+            mask = random_flip_image(mask,horizon=h,vertical=v)
+        
         return img ,mask
 
     def shuffle_item(self):
@@ -120,8 +108,8 @@ class DataGenerator():
             raise IndexError("index out of range")
         return self.data[from_:to_]
     
-    def get_item(self):
-        temp = self.get_batch(self.idx)
+    def __getitem__(self,index):
+        temp = self.get_batch(index)
         self.idx += 1
 
         x_train = np.zeros((self.batch_size,)+self.shape)
@@ -135,6 +123,15 @@ class DataGenerator():
             
         return x_train, y_true
             
-    def initialize(self):
+    def on_epoch_end(self):
         self.idx = 0
         self.shuffle_item()
+    
+    def get_label(self):
+        if self.is_train:
+            raise Exception('train mode cannot return label')
+        else :
+            labels = []
+            for (image,mask,name) in self.data:
+                labels.append(mask.tolist())
+            return np.array(labels).flatten()

@@ -25,8 +25,8 @@ LABEL = {'Glaucoma': 1., 'Non-Glaucoma': 0.}
 # Image shape to resahpe the image
 # h,w, chennel
 IMAGE_SHAPE = (512, 512, 3) # orignal size -(2056, 2124, 3)
-OPTIC_DISC_SHAPE = (256, 256, 3)
-
+# OPTIC_DISC_SHAPE = (256, 256, 3)
+OPTIC_DISC_SHAPE = (299, 299, 3)
 SEND_MESSAGE = False
 SAVE_CHECKPOINT = True
 EARLY_STOPPING = False
@@ -37,7 +37,7 @@ SHUFFLE_BUFFER = 50
 class TrainOption():
     def __init__(self,train_type):
         if train_type =='cls':
-            self.LEARNING_RATE = 1e-2
+            self.LEARNING_RATE = 1e-4
             self.LR_DEACY_STEPS = 2000
             self.LR_DECAY_RATE = 0.96
             self.MOMENTUM = 0.9

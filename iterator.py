@@ -1,84 +1,20 @@
 import sys
 import numpy as np
 import cv2
-from config import *
+import random
+import keras 
+import warnings
 import skimage
 from skimage.exposure import equalize_adapthist, adjust_gamma
 from skimage.transform import rescale, resize, downscale_local_mean, rotate
-import random
 
-import keras 
-from tensorflow.python.keras.utils.data_utils import Sequence
 
-def image_loader(f):
-    return skimage.io.imread(f)
+from config import *
+from utils.image_util import image_loader, resize_image, image_rotate, random_gamma, Adaptive_Histogram_Equalization, random_flip_image, normalize_img, crop_optic_disk, polartransform_image
+from utils.util import print_progress
 
-def resize_image(img,shape):
-    # cv2.INTER_NEAREST -- 이웃 보간법
-    # cv2.INTER_LINEAR -- 쌍 선형 보간법
-    # cv2.INTER_LINEAR_EXACT -- 비트 쌍 선형 보간법
-    # cv2.INTER_CUBIC -- 바이큐빅 보간법
-    # cv2.INTER_AREA -- 영역 보간법
-    # cv2.INTER_LANCZOS4 -- Lanczos 보간법
-    # 기본적으로 쌍 선형 보간법이 가장 많이 사용됩니다.
-    # 이미지를 확대하는 경우, 바이큐빅 보간법이나 쌍 선형 보간법을 가장 많이 사용합니다.
-    # 이미지를 축소하는 경우, 영역 보간법을 가장 많이 사용합니다.
-    # 영역 보간법에서 이미지를 확대하는 경우, 이웃 보간법과 비슷한 결과를 반환합니다.
-    # 출처 : https://076923.github.io/posts/Python-opencv-8/
-    # cv2.resize(img, dsize=shape, interpolation=cv2.INTER_AREA)
-    img = resize(img,shape)
-    return img
-
-def image_rotate(img, angle):
-    return rotate(img, angle)
-
-def random_gamma(img):
-    gamma = random.uniform(0.5,2.0)
-    gain = random.uniform(0.5,2.0)
-    return adjust_gamma(img,gamma, gain)
-
-def normalize_img(img):
-    shape = img.shape
-    img = np.float64(img.reshape(-1))
-    img -= img.mean()
-    img /= img.std()
-    img = img.reshape(shape)
-#     img = img/ 255
-    return img
-
-def crop_optic_disk(img,mk, margin = 3):
-    img_shape = img.shape
-    h = np.where(mk>0)[0]
-    h = int(mk.shape[0]/2) if h.size == 0 else h
+warnings.filterwarnings(action='ignore') 
         
-    w = np.where(mk>0)[1]
-    w = int(mk.shape[1]/2) if w.size == 0 else w
-    
-    maxh = min(np.max(h)+margin, mk.shape[0])
-    minh = max(np.min(h)-margin, 0)
-    maxw = min(np.max(w)+margin, mk.shape[1])
-    minw = max(np.min(w)-margin, 0)
-    
-    img = img[minh:maxh,minw:maxw,:]
-    img = resize(img, img_shape)
-    return img
-
-def Adaptive_Histogram_Equalization(img):
-#     clahe = cv2.createCLAHE(clipLimit=1, tileGridSize=(8,8))
-#     for i in range(3):
-#         ch = img[:,:,i]
-#         ch = clahe.apply(ch)
-#         img[:,:,i] = ch
-    return equalize_adapthist(img)         
-        
-def print_progress(total,i):
-    dot_num = int(i/total*100)
-    dot = '>'*dot_num
-    empty = '_'*(100-dot_num)
-    sys.stdout.write(f'\r [{dot}{empty}] {i} Done')
-    if i == total:
-        sys.stdout.write('\n')
-
 class DataGenerator(keras.utils.Sequence):
     def __init__(self, image_dir, masking_dir,batch_size, load_shape, disc_shape, is_train= True, copy=True,sample =None):
         self.image_dir = image_dir
@@ -94,7 +30,8 @@ class DataGenerator(keras.utils.Sequence):
         self.idx = 0
 
         self.load_data(copy)
-        self.shuffle_item()
+        if self.is_train:
+            self.shuffle_item()
         
     
     def __len__(self):
@@ -149,28 +86,31 @@ class DataGenerator(keras.utils.Sequence):
         return data
     
     def argumentation(self,img,mask,is_train):
-        
         if is_train:
             ## random한 각도로 image를 회전
             angle = random.randint(1,35)*10
             img = image_rotate(img, angle)
             mask = image_rotate(mask, angle)
-        
         ## get optic disk
-        img = crop_optic_disk(img,mask)
+        img = crop_optic_disk(img,mask,margin=3)
+        ## Polar Transform
+        angle = random.randint(1,35)*10
+        img = polartransform_image(img,angle)
         ## Adaptive_Histogram_Equalization
-        img = Adaptive_Histogram_Equalization(img)
+        img = Adaptive_Histogram_Equalization(img,cl=0.03)
         
         if is_train:
             ## random gamma
             img = random_gamma(img)
+            ## 50% 확률로 이미지 상하 혹은 좌우 반전
+            h=random.choice([True,False])
+            v=random.choice([True,False])
+            img = random_flip_image(img,horizon=h,vertical=v)
         
         ## image 정규화
         img = normalize_img(img)
-        ## image shift
-        ## 50% 확률로 이미지 상하 혹은 좌우 반전
-        img = resize_image(img,self.disc_shape)
-        return img    
+        
+        return resize_image(img,self.disc_shape)
 
     def shuffle_item(self):
         random.shuffle(self.data)
@@ -199,7 +139,8 @@ class DataGenerator(keras.utils.Sequence):
             
     def on_epoch_end(self): #initialize
         self.idx = 0
-        self.shuffle_item()
+        if self.is_train:
+            self.shuffle_item()
         
     def get_label(self):
         if self.is_train:

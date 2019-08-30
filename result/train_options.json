@@ -1,0 +1,1 @@
+{"optimizer": {"Adam": {"lr": 0.0, "beta_1": 0.8999999761581421, "beta_2": 0.9990000128746033, "decay": 0.0, "epsilon": 1e-07, "amsgrad": false}}, "batchsize": 1, "loss_function": "binary_crossentropy", "input_shape": [299, 299, 3], "augmemtation": {"gamma": true, "rotate": true, "polar": true, "hiseq": true, "normal": true, "flip": true, "copy": true}}

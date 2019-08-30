@@ -4,6 +4,7 @@ import keras
 from sklearn.utils import class_weight
 # from keras.regularizers import l2
 import tensorflow as tf
+from keras import backend as K
 
 """ Xception """
 class Xception():
@@ -111,103 +112,111 @@ class Xception():
 # At the final layer a 1x1 convolution is used to map each 64-component feature vector to the desired number of classes.
 #  In total the network has 23 convolutional layers for downsampling
 class Unet():
-    def __init__(self,is_train):
-        self.is_train = is_train
+    def __init__(self):
         self.name = 'Unet'
         self.filter_size = 64
+        self.l2 = 1e-4
+        
+        if K.image_data_format() != 'channels_last':
+            raise ValueError('channels first')
     
     def conv_block(self, x, fsize, pad="same" ,k_size=3, s_size=1, acti=True,batch=True):
         x = keras.layers.Conv2D(filters=fsize, kernel_size=k_size,
                                 padding=pad, strides=s_size,
                                 activation = 'linear',
-                                kernel_regularizer=keras.regularizers.l2(1e-4),
+                                kernel_regularizer=keras.regularizers.l2(self.l2),
                                 kernel_initializer='he_normal')(x)
-        #x = tf.layers.conv2d(inputs=x, filters=fsize,
-        #                     kernel_size=k_size,
-        #                     padding=pad, strides=s_size,
-        #                     kernel_regularizer=tf.contrib.layers.l2_regularizer(1e-4),
-        #                     kernel_initializer='he_normal',
-        #                     )
         if batch:
-            #x = tf.layers.batch_normalization(inputs = x, training=self.is_train)
-            x = keras.layers.BatchNormalization()(x)# , training=self.is_train
+            x = keras.layers.BatchNormalization(axis=-1)(x)
         if acti:
-            #x = tf.nn.relu(x)
             x = keras.layers.Activation('relu')(x)
         return x
     
     def pooling(self, x, pool, stride, pad='valid', types="MAX"):
         if types == "MAX":
-            # tf.layers.max_pooling2d(x, pool_size=pool, strides=stride, padding=pad)
             return keras.layers.MaxPooling2D(pool_size=pool, strides=stride, padding=pad)(x)
         elif types == "AVG":
-            # tf.layers.average_pooling2d(x, pool_size=pool, strides=stride, padding=pad)
             return keras.layers.AveragePooling2D(pool_size=pool, strides=stride, padding=pad)(x)
         else:
             raise ValueError('invalied pooling type')
-    
-    def encode(self,x, f_size, pad='valid', pool=False):
-        x = self.conv_block(x, f_size[0], pad="same" ,acti=True,batch=True)
-        x = self.conv_block(x, f_size[1], pad="same" ,acti=True,batch=True)
-        if pool:
-            p = self.pooling(x,2,2,pad=pad, types="MAX")
-            return x ,p
-        
-        else:
-            return x
             
 
-    def upconv_concat(self, x, b , fsize, pad='valid', k_size=2, s_size=2):
+    def upconv(self, x, fsize, pad='valid', k_size=2, s_size=2, acti=True, batch=True):
         x = keras.layers.Conv2DTranspose(filters=fsize, kernel_size =k_size, strides =s_size, padding=pad
-                                     ,kernel_regularizer=keras.regularizers.l2(1e-4))(x)
-        # x = tf.layers.conv2d_transpose(x ,filters=fsize,
-        #                                kernel_size =k_size, strides =s_size,
-        #                                padding=pad,
-        #                                kernel_regularizer=tf.contrib.layers.l2_regularizer(1e-4))
-        # tf.concat([x, b], axis=-1)
-        return keras.layers.concatenate([x, b] , axis=-1)
+                                     ,kernel_regularizer=keras.regularizers.l2(self.l2))(x)
+        if batch:
+            x = keras.layers.BatchNormalization(axis=-1)(x)
+        if acti:
+            x = keras.layers.Activation('relu')(x)
+        return x
             
     def build(self, input_shape):
         inputs = keras.layers.Input(input_shape)
         
-        fs = self.filter_size
-        bridge1, x = self.encode(inputs, [fs,fs],pad='same',pool=True)
-        fs = int(fs*2)
-        bridge2, x = self.encode(x, [fs,fs],pad='same',pool=True)
-        fs = int(fs*2)
-        bridge3, x = self.encode(x, [fs,fs],pad='same',pool=True)
-        fs = int(fs*2)
-        bridge4, x = self.encode(x, [fs,fs],pad='same',pool=True)
-        fs = int(fs*2)
+        fs = self.filter_size # 64
+        x = self.conv_block(inputs, fs, pad='same', acti=True, batch=True)
+        c1 = self.conv_block(x, fs, pad='same', acti=True, batch=True)
+        #c1 = keras.layers.Dropout(rate=0.3)(x)
+        x = self.pooling(c1,2,2,pad='same', types="MAX")
         
-        x = self.encode(x, [fs,fs],pool=False, pad='same')
-        # print(x.get_shape().as_list())
+        fs = int(fs*2) # 128
+        x = self.conv_block(x, fs, pad='same', acti=True, batch=True)
+        c2 = self.conv_block(x, fs, pad='same', acti=True, batch=True)
+        #c2 = keras.layers.Dropout(rate=0.3)(x)
+        x = self.pooling(c2,2,2,pad='same', types="MAX")
+        
+        fs = int(fs*2) # 256
+        x = self.conv_block(x, fs, pad='same', acti=True, batch=True)
+        c3 = self.conv_block(x, fs, pad='same', acti=True, batch=True)
+        #c3 = keras.layers.Dropout(rate=0.3)(x)
+        x = self.pooling(c3,2,2,pad='same', types="MAX")
+        
+        fs = int(fs*2) # 512
+        x = self.conv_block(x, fs, pad='same', acti=True, batch=True)
+        c4 = self.conv_block(x, fs, pad='same', acti=True, batch=True)
+        c4 = keras.layers.Dropout(rate=0.3)(c4)
+        x = self.pooling(c4,2,2,pad='same', types="MAX")
+        
+        fs = int(fs*2) # 1024
+        x = self.conv_block(x, fs, pad='same', acti=True, batch=True)
+        x = self.conv_block(x, fs, pad='same', acti=True, batch=True)
+        x = keras.layers.Dropout(rate=0.3)(x)
+        #x = self.encode(x, [fs,fs], pad='same', pool=False, drop =True)
         
         fs = int(fs/2)
-        x = self.upconv_concat(x, bridge4, 256, pad='same')
-        x = self.encode(x, [fs,fs],pool=False, pad='same')
+        x = self.upconv(x, fs, k_size=3, s_size=2, pad='same', acti=False, batch=False) 
+        x = keras.layers.Concatenate(axis=-1)([x, c4])
+        #x = keras.layers.Dropout(rate=0.3)(x)
+        x = self.conv_block(x, fs, pad="same", acti=True,batch=True)
+        x = self.conv_block(x, fs, pad="same", acti=True,batch=True)
+        #x = self.upconv(x, fs, pad='same', k_size=3, s_size=1, acti=True, batch=True)
+        #x = self.upconv(x, fs, pad='same', k_size=3, s_size=1, acti=True, batch=True)
         
         fs = int(fs/2)
-        x = self.upconv_concat(x, bridge3, 128, pad='same')
-        x = self.encode(x, [fs,fs],pool=False, pad='same')
+        x = self.upconv(x, fs, k_size=3, s_size=2, pad='same', acti=False, batch=False) 
+        x = keras.layers.Concatenate(axis=-1)([x, c3])
+        #x = keras.layers.Dropout(rate=0.3)(x)
+        x = self.conv_block(x, fs, pad="same", acti=True,batch=True)
+        x = self.conv_block(x, fs, pad="same", acti=True,batch=True)
         
         fs = int(fs/2)
-        x = self.upconv_concat(x, bridge2, 64, pad='same')
-        x = self.encode(x, [fs,fs],pool=False, pad='same')
+        x = self.upconv(x, fs, k_size=3, s_size=2, pad='same', acti=False, batch=False) 
+        x = keras.layers.Concatenate(axis=-1)([x, c2])
+        #x = keras.layers.Dropout(rate=0.3)(x)
+        x = self.conv_block(x, fs, pad="same", acti=True,batch=True)
+        x = self.conv_block(x, fs, pad="same", acti=True,batch=True)
         
         fs = int(fs/2)
-        x = self.upconv_concat(x, bridge1, 32, pad='same')
-        x = self.encode(x, [fs,fs],pool=False, pad='same')
+        x = self.upconv(x, fs, k_size=3, s_size=2, pad='same', acti=False, batch=False) 
+        x = keras.layers.Concatenate(axis=-1)([x, c1])
+        #x = keras.layers.Dropout(rate=0.3)(x)
+        x = self.conv_block(x, fs, pad="same", acti=True,batch=True)
+        x = self.conv_block(x, fs, pad="same", acti=True,batch=True)
         
-        x = self.conv_block(x, 1, k_size=1, s_size=1, acti=False,batch=False, pad='same')
-        
-        # tf.nn.sigmoid(x)
-        out = keras.layers.Activation('sigmoid')(x)
-#         out = keras.activations.sigmoid(x)
-        
-        model = keras.Model(inputs=inputs, outputs=out)
-        
-        return model
+        x = self.conv_block(x, 2, pad='same', k_size=1, s_size=1, acti=False,batch=False)
+        out = keras.layers.Activation('softmax')(x) #sigmoid
+
+        return keras.Model(inputs=inputs, outputs=out)
 
 
 """ Inception v4  """
@@ -269,9 +278,6 @@ class InceptionV4():
         return x
     
     def inception_A(self,x):
-#         if types.upper() not in ["A","B","C"]:
-#             raise ValueError('invalied value : inceoption layer type should be one of a,A,b,B,c,C')
-#         if types = "A":
         node1 = self.conv_block(x,1,96,1,"same")
         node1 = self.pooling(node1,3,1,"same",types="AVG")
 
@@ -326,8 +332,6 @@ class InceptionV4():
         return tf.concat((node1, node2, node3, node4),axis=-1) # 71x71x192
         
     def reduction_A(self,x):
-#         if types.upper() not in ["A","B"]:
-#             raise ValueError('invalied value : reduction layer type should be a,A or b,B')
         node1 = self.pooling(x, 3, 2, "valid",types="MAX")
         
         node2 = self.conv_block(x,3,self.n,2,"valid")
@@ -339,8 +343,6 @@ class InceptionV4():
         return tf.concat((node1, node2, node3),axis=-1) # 71x71x192
         
     def reduction_B(self,x):
-#         if types.upper() not in ["A","B"]:
-#             raise ValueError('invalied value : reduction layer type should be a,A or b,B')
         node1 = self.pooling(x,3,2,"valid",types="MAX")
         
         node2 = self.conv_block(x,3,192,2,"valid")
@@ -391,7 +393,7 @@ class ResNetV3():
     def resnet_block(self,x, filter_size, kernels=3, stride=1 ,batch=True ,acti=True ):
         if batch:
 #             x = tf.layers.batch_normalization(inputs = x, training=self.training)
-            x = keras.layers.BatchNormalization()(x) #,training=self.training
+            x = keras.layers.BatchNormalization(axis=-1)(x) #,training=self.training
         if acti:
             x = keras.layers.Activation('relu')(x)
         x = keras.layers.Conv2D(filters=filter_size,
@@ -412,7 +414,7 @@ class ResNetV3():
                                    kernel_regularizer=tf.contrib.layers.l2_regularizer(self.l2)
                                   )(inputs)
 #         x = tf.layers.batch_normalization(inputs = x, training=self.training)
-        x = keras.layers.BatchNormalization()(x) #,training=self.training
+        x = keras.layers.BatchNormalization(axis=-1)(x) #,training=self.training
         x = keras.layers.Activation('relu')(x)
         
         for stage in range(3):
@@ -444,7 +446,7 @@ class ResNetV3():
         
         
 #         x = tf.layers.batch_normalization(inputs = x, training=self.training)
-        x = keras.layers.BatchNormalization()(x) #,training=self.training
+        x = keras.layers.BatchNormalization(axis=-1)(x) #,training=self.training
         x = keras.layers.Activation('relu')(x)
         x = keras.layers.AveragePooling2D(pool_size = 8)(x)
         x = keras.layers.Flatten()(x)
@@ -534,6 +536,10 @@ class ResNetV2():
         return out
     
 if __name__ == "__main__":
-    xception = Xception()
-    model = xception.build()
+    from config import *
+    with tf.device('/device:GPU:0'):
+        unet = Unet().build(IMAGE_SHAPE)
+#     with tf.device('/device:GPU:0'):
+#         xception = Xception()
+#         model = xception.build((299,299,3))
     model.summary()

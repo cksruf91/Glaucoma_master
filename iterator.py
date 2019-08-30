@@ -8,21 +8,30 @@ import skimage
 from skimage.exposure import equalize_adapthist, adjust_gamma
 from skimage.transform import rescale, resize, downscale_local_mean, rotate
 
-
 from config import *
-from utils.image_util import image_loader, resize_image, image_rotate, random_gamma, Adaptive_Histogram_Equalization, random_flip_image, normalize_img, crop_optic_disk, polartransform_image
+from utils.image_util import image_loader, resize_image, image_rotate, random_gamma, Adaptive_Histogram_Equalization, random_flip_image, normalize_img, crop_optic_disk, polartransform_image, random_invert_image
 from utils.util import print_progress
 
 warnings.filterwarnings(action='ignore') 
         
-class DataGenerator(keras.utils.Sequence):
-    def __init__(self, image_dir, masking_dir,batch_size, load_shape, disc_shape, is_train= True, copy=True,sample =None):
+class DataIterator(keras.utils.Sequence):
+    def __init__(self, image_dir, masking_dir,batch_size, load_shape, disc_shape
+                 , is_train= True, copy=False, sample =None, rotate=False, polar=False, hiseq=False
+                 , gamma=False, flip=False, normal=False, invert=False):
         self.image_dir = image_dir
         self.masking_dir = masking_dir
         self.batch_size = batch_size
         self.is_train = is_train
         self.load_shape = load_shape
         self.disc_shape = disc_shape
+        self.rotate = rotate
+        self.polar = polar
+        self.hiseq = hiseq
+        self.gamma = gamma
+        self.flip = flip
+        self.normal = normal
+        self.invert = invert
+        
         if (sample is not None) & (not isinstance(sample,int)):
             raise ValueError("sample is not integer")
         else:
@@ -75,40 +84,43 @@ class DataGenerator(keras.utils.Sequence):
             mask = image_loader(mask)
             ## resize
             image = resize_image(image,self.load_shape)
+            mask = resize_image(mask,self.load_shape)
             
             mask = mask[:,:,0]
-            mask = np.where(mask<=100,0.0,mask)
-            mask = np.where(mask>100,1.0,mask)
+            mask = np.where(mask<=0.3,0.0,mask)
+            mask = np.where(mask>0.3,1.0,mask)
             mask = mask[:,:,np.newaxis]
             #mask = resize_image(mask,self.load_shape)
             #image = self.argumentation(image,mask,self.is_train)
             data.append((image,mask,label,name))
         return data
     
-    def argumentation(self,img,mask,is_train):
+    def augmentation(self,img,mask,is_train):
         if is_train:
             ## random한 각도로 image를 회전
             angle = random.randint(1,35)*10
-            img = image_rotate(img, angle)
-            mask = image_rotate(mask, angle)
+            img = image_rotate(img, angle) if self.rotate else img 
+            mask = image_rotate(mask, angle) if self.rotate else mask
         ## get optic disk
         img = crop_optic_disk(img,mask,margin=3)
         ## Polar Transform
         angle = random.randint(1,35)*10
-        img = polartransform_image(img,angle)
+        img = polartransform_image(img,angle) if self.polar else img
         ## Adaptive_Histogram_Equalization
-        img = Adaptive_Histogram_Equalization(img,cl=0.03)
+        img = Adaptive_Histogram_Equalization(img,cl=0.03) if self.hiseq else img
         
         if is_train:
             ## random gamma
-            img = random_gamma(img)
+            img = random_gamma(img) if self.gamma else img 
             ## 50% 확률로 이미지 상하 혹은 좌우 반전
             h=random.choice([True,False])
             v=random.choice([True,False])
-            img = random_flip_image(img,horizon=h,vertical=v)
+            img = random_flip_image(img,horizon=h,vertical=v) if self.flip else img 
+            ## image invert
+            img = random_invert_image(img) if self.invert else img
         
         ## image 정규화
-        img = normalize_img(img)
+        img = normalize_img(img) if self.normal else img 
         
         return resize_image(img,self.disc_shape)
 
@@ -130,7 +142,7 @@ class DataGenerator(keras.utils.Sequence):
         y_true = np.zeros((self.batch_size,1))
         names = []
         for i,(image,mask,label,name) in enumerate(temp):
-            image = self.argumentation(image,mask,self.is_train)
+            image = self.augmentation(image,mask,self.is_train)
             x_train[i] = image
             y_true[i] = label
             names.append(name)

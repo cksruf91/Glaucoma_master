@@ -4,6 +4,7 @@ import warnings
 import skimage
 from skimage.exposure import equalize_adapthist, adjust_gamma
 from skimage.transform import rescale, resize, downscale_local_mean, rotate
+from skimage.util import invert
 import polarTransform
 
 warnings.filterwarnings(action='ignore') 
@@ -11,7 +12,7 @@ warnings.filterwarnings(action='ignore')
 def image_loader(f):
     return skimage.io.imread(f)
 
-def resize_image(img,shape):
+def resize_image(img, shape, keeprange=False):
     # cv2.INTER_NEAREST -- 이웃 보간법
     # cv2.INTER_LINEAR -- 쌍 선형 보간법
     # cv2.INTER_LINEAR_EXACT -- 비트 쌍 선형 보간법
@@ -24,15 +25,39 @@ def resize_image(img,shape):
     # 영역 보간법에서 이미지를 확대하는 경우, 이웃 보간법과 비슷한 결과를 반환합니다.
     # 출처 : https://076923.github.io/posts/Python-opencv-8/
     # cv2.resize(img, dsize=shape, interpolation=cv2.INTER_AREA)
-    return resize(img,shape)
+    return resize(img, shape, preserve_range=keeprange)
 
 def image_rotate(img, angle):
     return rotate(img, angle,preserve_range=False)
 
 def random_gamma(img):
-    gamma = random.uniform(1.5,1.0)
-    gain = random.uniform(1.8,0.5)
+    gamma = random.uniform(1.5,0.5)
+    gain = 1
     return adjust_gamma(img,gamma, gain)
+
+def random_invert_image(img):
+    iv=random.choice([True,False])
+    if iv:
+        return invert(img)
+    else:
+        return img
+    
+def random_crop(img,mask, prop):
+    ishape = img.shape
+    mshape = mask.shape
+    if ishape[:2] != mshape[:2]:
+        raise ValueError(f'image and maks is not same {ishape}, {mshape}')
+    h = int(ishape[0]*prop)
+    h_crop1 = random.choice(range(h))
+    h_crop2 = h - h_crop1
+    v = int(ishape[1]*prop)
+    v_crop1 = random.choice(range(v))
+    v_crop2 = v - v_crop1
+    
+    img = resize_image(img[h_crop1:-h_crop2,v_crop1:-v_crop2,:],ishape)
+    mask = resize_image(mask[h_crop1:-h_crop2,v_crop1:-v_crop2,:],mshape)
+    
+    return img, mask
 
 def Adaptive_Histogram_Equalization(img,cl=0.03):
 #     clahe = cv2.createCLAHE(clipLimit=1, tileGridSize=(8,8))
@@ -57,8 +82,16 @@ def normalize_img(img):
     img -= img.mean()
     img /= img.std()
     img = img.reshape(shape)
-#     img = img/ 255
     return img
+
+def per_chenel_normalize(img):
+    normed = np.zeros(img.shape)
+    for i in range(img.shape[-1]):
+        temp = img[:,:,i]
+        temp -= temp.mean()
+        temp /= temp.std()
+        normed[:,:,i] = temp
+    return normed
 
 def crop_optic_disk(img,mk, margin = 3):
     img_shape = img.shape
@@ -82,3 +115,4 @@ def polartransform_image(img,angle):
                                                  finalAngle=np.pi*2+angle, hasColor=True,border = 'nearest')
     img = img.transpose(1,0,2)
     return np.clip(img,0,1)
+

@@ -8,6 +8,15 @@ from sklearn.metrics import confusion_matrix
 from slacker import Slacker
 from config import *
 
+def last_cheackpoint(objectdir):
+    checkpoints = [i for i in os.listdir(objectdir) if 'checkpoint-' in i ]
+    checkpoints.sort(key = lambda s : os.path.getmtime(os.path.join(objectdir, s)))
+    return os.path.join(objectdir,checkpoints[-1])
+
+def get_config(obj):
+    if hasattr(obj,"__class__")==False:
+        raise ValueError(f"{obj} is not class")
+    return {obj.__class__.__name__ : obj.get_config()}
 
 def history_graph(hist,metics): 
     fig = plt.figure()
@@ -27,30 +36,19 @@ def history_graph(hist,metics):
     plt.show()
     return None
 
-def print_confusion_matrix(y_true,y_pred,cut_off = None):
+def confusion_matrix_report(y_true,y_pred,cut_off = None):
     if cut_off is None:
         cut_off = np.quantile(y_pred,0.9)
 #     print(f"cut_off : {cut_off:5}")
     tn, fp, fn, tp = confusion_matrix(y_true, y_pred>cut_off).ravel()
-    print(f"{cut_off:3.1f}{1:7},{0:7}\n{1:7}{tp:7},{fp:7}\n{0:7}{fn:7},{tn:7}")
-    return None
+    conf_mat = f"{cut_off:3.1f}{1:7},{0:7}\n{1:7}{tp:7},{fp:7}\n{0:7}{fn:7},{tn:7}"
+    sensitivity = f"Sensitivity : {tp/(tp+fn):1.5}"
+    specificity = f"Specificity : {tn/(tn+fp):1.5}"
+    return conf_mat, sensitivity, specificity
 
 def slack_message(chennel, message,token):
     slack = Slacker(token)
     slack.chat.post_message(chennel, message)
-
-def learning_rate_schedule(epoch_, lr):
-    if epoch_ > 55:
-        lr *= 1e-4
-    elif epoch_ > 45:
-        lr *= 0.5e-3
-    elif epoch_ > 35:
-        lr *= 1e-3
-    elif epoch_ > 25:
-        lr *= 1e-2
-    elif epoch_ > 15:
-        lr *= 1e-1
-    return lr
 
 
 def visualize_anomaly(error_df, threshold = None):

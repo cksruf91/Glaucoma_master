@@ -26,9 +26,6 @@ if arg.mode:
 else :
     locs = TEST_IMAGE
 
-
-opts = TrainOption('seg')
-
 def auc_function(y_target, y_pred):
     fpr, tpr, thresholds = metrics.roc_curve(y_target, y_pred, pos_label=1)
     return metrics.auc(fpr, tpr) 

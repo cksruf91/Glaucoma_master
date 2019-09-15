@@ -4,6 +4,7 @@ import warnings
 import skimage
 from skimage.exposure import equalize_adapthist, adjust_gamma
 from skimage.transform import rescale, resize, downscale_local_mean, rotate
+from skimage.morphology import opening, closing, square, disk
 from skimage.util import invert
 import polarTransform
 
@@ -41,6 +42,19 @@ def random_invert_image(img):
         return invert(img)
     else:
         return img
+
+def opening_image(img,size):
+#     zero = np.zeros(img.shape)
+#     for i in range(img.shape[-1]):
+#         zero[:,:,i] = opening(img[:,:,i], disk(size))
+    return opening(img, disk(size))
+
+def closing_image(img,size):
+#     zero = np.zeros(img.shape)
+#     for i in range(img.shape[-1]):
+#         zero[:,:,i] = closing(img[:,:,i], disk(size))
+    return closing(img, disk(size))
+    
     
 def random_crop(img,mask, prop):
     ishape = img.shape

@@ -19,6 +19,7 @@ def get_config(obj):
     return {obj.__class__.__name__ : obj.get_config()}
 
 def history_graph(hist,metics): 
+    
     fig = plt.figure()
     plt.xlabel('epochs')
     plt.ylabel('acc(%)')
@@ -78,11 +79,11 @@ def visualize_anomaly(error_df, threshold = None):
     ax.legend()
     
 
-def print_progress(total,i):
+def print_progress(total, i, prefix=""):
     dot_num = int(i/total*50)
     dot = '>'*dot_num
     empty = '_'*(50-dot_num)
-    sys.stdout.write(f'\r [{dot}{empty}] {i} Done')
+    sys.stdout.write(f'\r {prefix} [{dot}{empty}] {i} Done')
     if i == total:
         sys.stdout.write('\n')
         

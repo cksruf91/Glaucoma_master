@@ -5,9 +5,10 @@ import tensorflow as tf
 import keras
 import keras.backend as K
 from keras.callbacks import EarlyStopping, ModelCheckpoint, LearningRateScheduler
+import keras_radam
 
 from config import *
-from model import *
+from models.unet import Unet
 from seg_iterator import DataIterator
 from utils.util import last_cheackpoint, get_config
 from callback_module import IntervalEvaluation, HistoryCheckpoint, SlackMessage
@@ -32,8 +33,10 @@ loss_func = 'categorical_crossentropy' #binary_crossentropy
 testmode = 10 if args().test else None
 BATCH_SIZE = 1
 
+# optim = keras_radam.RAdam(lr=1e-5, beta_1=0.9, beta_2=0.999, epsilon=None, decay=0.0, weight_decay=0.0
+#                           , amsgrad=False, total_steps=0, warmup_proportion=0.1, min_lr=1e-10,)
 optim = keras.optimizers.Adam(lr=1e-3, beta_1=0.9, beta_2=0.999, epsilon=None, decay=0.0, amsgrad=False)
-# optim = keras.optimizers.Adadelta(lr=1.0, rho=0.95, epsilon=None, decay=0.9)
+# optim = keras.optimizers.Adadelta(lr=1.0, rho=0.95, epsilon=None, decay=0.0)
 # optim = keras.optimizers.SGD(lr=0.045, decay=1e-6, momentum=0.9, nesterov=True)
 # optim = keras.optimizers.RMSprop(lr=0.001, rho=0.9, epsilon=None, decay=0.0)
 # optim = keras.optimizers.Nadam(lr=0.001, beta_1=0.9, beta_2=0.999, epsilon=None, schedule_decay=0.004)
@@ -41,7 +44,7 @@ learning_rate = optim.get_config()['lr']
 def lr_scheduler(epoch):
     lr = learning_rate
     new_lr = lr * 0.1**(epoch//10)
-    return max(new_lr,1e-7)
+    return max(new_lr,1e-10)
 
 with tf.device('/device:GPU:0'):
     unet = Unet().build(IMAGE_SHAPE)
@@ -57,7 +60,7 @@ unet.summary()
 #     model_json = json.loads(f.read())
 # unet = keras.models.model_from_json(model_json)
 
-augm = {"gamma":True, "rotate":True, "flip":True, "hiseq":False, "normal":True, "invert":False, "crop":True}
+augm = {"gamma":True, "rotate":True, "flip":True, "hiseq":False, "normal":False, "invert":False, "crop":True}
 
 ## load batch generator
 print(f"\ntrain data from : {MASKING_TRAIN_IMAGE}")
@@ -72,7 +75,7 @@ test_iterator = DataIterator(TRAIN_IMAGE, MASKING_VAL_IMAGE, BATCH_SIZE, IMAGE_S
 
 call_backs = [
     IntervalEvaluation(test_iterator, loss_func, monitor_name = monitors),
-    EarlyStopping(monitor=f'val_{monitors}', patience =10, verbose =1 , mode ='min'),
+#     EarlyStopping(monitor=f'val_{monitors}', patience =10, verbose =1 , mode ='min'),
     ModelCheckpoint(os.path.join(SEGMENT_RESULT_PATH, "checkpoint-{epoch:03d}.h5"),
                     monitor=f'val_{monitors}', save_best_only=True, mode='min'),
     LearningRateScheduler(lr_scheduler, verbose=1),
@@ -82,10 +85,9 @@ call_backs = [
 
 try:
     weight = last_cheackpoint(SEGMENT_RESULT_PATH)
-    print(weight)
     init_epoch = int(os.path.basename(weight.split("-")[-1].split(".")[0]))
     unet.load_weights(weight)
-    print("*******************\ncheckpoint restored\n*******************")
+    print(f"*******************\ncheckpoint restored {weight}\n*******************")
 except:
     init_epoch = 0
     print("*******************\nfailed to load checkpoint\n*******************")
@@ -99,15 +101,18 @@ with open(os.path.join(SEGMENT_RESULT_PATH,'train_options.json'),'w') as f:
 """ run train """
 hist = unet.fit_generator(generator=train_iterator,
                     steps_per_epoch=None,
-                    epochs=60,
+                    epochs=100,
                     verbose=1,
                     callbacks=call_backs,
                     class_weight=None,
-                    max_queue_size=10,
+                    max_queue_size=30,
                     workers=1,
                     use_multiprocessing=False,
                     initial_epoch=init_epoch
                     #validation_data=test_iterator,
                     #validation_steps=None,
                    )
-print(hist.history)
+
+hist = pd.DataFrame(hist.history)
+hist.to_csv(os.path.join(SEGMENT_RESULT_PATH,"history.csv"))
+hist.head()

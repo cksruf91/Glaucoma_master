@@ -1,17 +1,15 @@
 import numpy as np
+import keras
 import os
-import timeit
-import time
-import cv2
+import sys
+import json
+import sys
 import argparse
-from sklearn import metrics
-from sklearn.metrics import confusion_matrix
+import skimage
 
+from utils.image_util import image_loader, resize_image, image_rotate, random_gamma, Adaptive_Histogram_Equalization, random_flip_image, normalize_img, crop_optic_disk, opening_image, closing_image
+from utils.util import print_progress, last_cheackpoint
 from config import *
-from model import *
-from seg_iterator import seg_batch_iterator
-from utils.seg_tfrecord_util import segment_parse_tfrecord, normalize_img, resize_img
-from utils.util import train_progressbar, slack_message, learning_rate_schedule, print_confusion_matrix
 
 def args():
     parser = argparse.ArgumentParser()
@@ -19,106 +17,84 @@ def args():
                         , help='1: train image, 0: test image')  # number of class
     args = parser.parse_args()
     return args
+
 arg = args()
 
+## 1 : train image 2: test image
 if arg.mode:
-    locs = TRAIN_IMAGE
+    image_loc = TRAIN_IMAGE
 else :
-    locs = TEST_IMAGE
+    image_loc = TEST_IMAGE
 
-def auc_function(y_target, y_pred):
-    fpr, tpr, thresholds = metrics.roc_curve(y_target, y_pred, pos_label=1)
-    return metrics.auc(fpr, tpr) 
+## Model Loading
+with open(os.path.join(SEGMENT_RESULT_PATH,'model.json'), 'r') as f:
+    model_json = json.loads(f.read())
 
-with tf.device('/device:GPU:0'):
-    # placeholder for images
-    shapes = list((None,)+IMAGE_SHAPE)
-    images = tf.placeholder('float32', shape=shapes, name='images')  
-    
-    # placeholder for labels
-    shapes = list((None,)+IMAGE_SHAPE[:2]+(1,))
-    mask = tf.placeholder('float32', shape=shapes, name='mask')
-    
-    # placeholder for training boolean (is training)
-    training = tf.placeholder('bool', name='training') 
-    
-    global_step = tf.get_variable(name='global_step', shape=[], dtype='int64', trainable=False)  
-    learning_rate = tf.placeholder('float32', name='learning_rate')
-    # learning_rate = tf.train.exponential_decay(opts.LEARNING_RATE, global_step, opts.LR_DEACY_STEPS, opts.LR_DECAY_RATE)
-    
-    ## placeholder fot store Beat accuracy
-    best_score = tf.get_variable(name='best_accuracy', dtype='float32', trainable=False, initializer=0.0)
-    
-    # model build
-    with tf.variable_scope('build'):
-        # output = ResNetV3(training).build(images)
-        # output = InceptionV4(training).build(images)
-        output = Unet(training).build(images)
-    
-    print('model build')
-
-    
-
-#loss and optimizer
-with tf.variable_scope('losses'):
-    loss = tf.keras.backend.binary_crossentropy(mask, output)
-    loss = tf.reduce_mean(loss, name='loss')
-
-with tf.variable_scope('optimizers'):
-    optimizer = tf.train.AdamOptimizer(learning_rate)
-    update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
-    train_op = optimizer.minimize(loss, global_step=global_step) 
-    train_op = tf.group([train_op, update_ops], name='train_op')
-#     optimizer = tf.train.MomentumOptimizer(learning_rate=opts.LEARNING_RATE, momentum=opts.MOMENTUM, use_nesterov=True)
-    
-# method to save model
-# 참조 : https://goodtogreate.tistory.com/entry/Saving-and-Restoring
-saver = tf.train.Saver()
+model = keras.models.model_from_json(model_json)
+weight = last_cheackpoint(SEGMENT_RESULT_PATH)
+print(f"restore check point : {os.path.basename(weight)}")
+model.load_weights(weight)
 
 
-with tf.Session() as sess:
-    sess.run(tf.global_variables_initializer())
-    gstep = sess.run(global_step)
-    
-    image_files = []
-    for (path, dir, files) in os.walk(locs):
-        if path ==TRAIN_IMAGE: # 현재 디렉토리는 넘김
-            continue
-        for file in files:
-            image_files.append(os.path.join(path, file))
-    
-    ## try to restore last model checkpoint
-    try: 
-        saver.restore(sess, tf.train.latest_checkpoint(SEGMENT_RESULT_PATH))
-        check_point_name = tf.train.latest_checkpoint(SEGMENT_RESULT_PATH)
-        last_epoch = int(check_point_name.split('_')[-1].split('.')[0])
-        print("checkpoint restored")
-    except:
-        last_epoch = 0        
-        print("failed to load checkpoint")
+## image Loading
+image_files = []
+for (path, dir, files) in os.walk(image_loc):
+    if path ==image_loc: # 현재 디렉토리는 넘김
+        continue
+    for file in files:
+        image_files.append(os.path.join(path, file))
 
-    
-    for file in image_files:
-        image = cv2.imread(file, cv2.IMREAD_COLOR)
-        image = resize_img(image,IMAGE_SHAPE[:2])
-        image = normalize_img(image)
         
-        image = image[np.newaxis,:,:,:]
-        
-        """ Validation """
-        output_= sess.run([output], feed_dict={images: image, training: False}) 
-        
-        masking = output_[0]
-        m = masking[0]
-        m2 = np.append(m,m,axis =2)
-        m2 = np.append(m2,m,axis =2)
-        m2 = np.where(m2>0.5,255,m2)
-        
-        masking = m2
-        
-        
-        file = os.path.basename(file)
-        print(cv2.imwrite(os.path.join(MASK_LOC ,'mask_'+ file),masking))
+## number of image 
+n_image = len(image_files)
 
-            
-print('end..')
+## train 했을때의 옵션
+with open(os.path.join(SEGMENT_RESULT_PATH,'train_options.json'), 'r') as f:
+    train_options = json.loads(f.read())
+
+hiseq = train_options['augmemtation']['hiseq']
+normal = train_options['augmemtation']['normal']
+
+data = np.zeros((n_image,) +IMAGE_SHAPE)
+for i, file in enumerate(image_files):
+    print_progress(n_image, i+1, "loading...")
+    
+    image = image_loader(file)
+    image = resize_image(image,IMAGE_SHAPE)
+    
+    ## Equalize and normalize if you do it when training
+    image = Adaptive_Histogram_Equalization(image) if hiseq else image
+    image = normalize_img(image) if normal else image
+    
+    data[i] = image
+
+## prediction
+print("predict..")
+y_pred = model.predict(data, verbose=1,batch_size=1)
+y_pred = np.argmax(y_pred,-1)
+
+## 0~1 -> 0 ~ 255
+y_pred = np.where(y_pred>=0.3,255,y_pred)
+y_pred = np.where(y_pred<0.3,0,y_pred)
+
+## chennel
+# mask = np.zeros((n_image,)+IMAGE_SHAPE)
+
+opensize = 10
+for idx in range(n_image):
+    ## remove noise
+    opened = opening_image(y_pred[idx], opensize)
+    closed = closing_image(opened, opensize)
+    
+    ## generate file name
+    f = "mask_" + os.path.basename(image_files[idx])
+    f = os.path.join(MASK_LOC, f)
+    
+    print_progress(n_image, idx+1, "saveing..")
+    
+    mask = np.zeros(IMAGE_SHAPE)
+    for i in range(3):
+        mask[:,:,i] = closed
+
+    ## save
+    skimage.io.imsave(f, mask.astype(np.uint8))

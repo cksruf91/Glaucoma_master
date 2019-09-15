@@ -84,15 +84,11 @@ class DataIterator(keras.utils.Sequence):
             mask = resize_image(mask,self.shape)
             
             mask = mask[:,:,0]
-            
             mask = np.where(mask<=0.3,0.0,mask)
             mask = np.where(mask>0.3,1.0,mask)
             
             mask = to_categorical(mask,2)
-#             print(mask.shape)
-#             print(collections.Counter(mask[:,:,0].flatten()))
-            #mask = mask[:,:,np.newaxis]
-            #image = self.argumentation(image,mask,self.is_train)
+
             data.append((image,mask, name))
         return data
     
@@ -108,9 +104,9 @@ class DataIterator(keras.utils.Sequence):
             ## 50% 확률로 image 뒤집기
             h=random.choice([True,False])
             v=random.choice([True,False])
-            
             img = random_flip_image(img,horizon=h,vertical=v) if self.flip else img 
             mask = random_flip_image(mask,horizon=h,vertical=v) if self.flip else mask 
+            
             ## image invert
             img = random_invert_image(img) if self.invert else img
 

@@ -14,18 +14,6 @@ def image_loader(f):
     return skimage.io.imread(f)
 
 def resize_image(img, shape, keeprange=False):
-    # cv2.INTER_NEAREST -- 이웃 보간법
-    # cv2.INTER_LINEAR -- 쌍 선형 보간법
-    # cv2.INTER_LINEAR_EXACT -- 비트 쌍 선형 보간법
-    # cv2.INTER_CUBIC -- 바이큐빅 보간법
-    # cv2.INTER_AREA -- 영역 보간법
-    # cv2.INTER_LANCZOS4 -- Lanczos 보간법
-    # 기본적으로 쌍 선형 보간법이 가장 많이 사용됩니다.
-    # 이미지를 확대하는 경우, 바이큐빅 보간법이나 쌍 선형 보간법을 가장 많이 사용합니다.
-    # 이미지를 축소하는 경우, 영역 보간법을 가장 많이 사용합니다.
-    # 영역 보간법에서 이미지를 확대하는 경우, 이웃 보간법과 비슷한 결과를 반환합니다.
-    # 출처 : https://076923.github.io/posts/Python-opencv-8/
-    # cv2.resize(img, dsize=shape, interpolation=cv2.INTER_AREA)
     return resize(img, shape, preserve_range=keeprange)
 
 def image_rotate(img, angle):
@@ -79,7 +67,11 @@ def Adaptive_Histogram_Equalization(img,cl=0.03):
 #         ch = img[:,:,i]
 #         ch = clahe.apply(ch)
 #         img[:,:,i] = ch
-    return equalize_adapthist(img,clip_limit=cl)
+    for i in range(3):
+        ch = img[:,:,i]
+        transformed = equalize_adapthist(ch,clip_limit=cl)
+        img[:,:,i] = transformed
+    return img
 
 def random_flip_image(img, horizon=True,vertical=True):
     if img.ndim != 3:
@@ -130,3 +122,18 @@ def polartransform_image(img,angle):
     img = img.transpose(1,0,2)
     return np.clip(img,0,1)
 
+def polar(img,mask):
+    
+    for angle in range(0,360,10):
+        test = polartransform_image(mask,angle)
+        test = test.max(axis=0).max(-1) > 0.5
+        trim = int(test.shape[0]*.3/2)
+        test = np.concatenate([test[:trim],test[:trim]])
+        if any(test)==False:
+            break
+    
+    transfrom_im = polartransform_image(img,angle)
+    trim = int(transfrom_im.shape[0]/3)
+    
+    return transfrom_im[:-trim,:,:]
+    

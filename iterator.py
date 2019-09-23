@@ -18,7 +18,7 @@ warnings.filterwarnings(action='ignore')
 class DataIterator(keras.utils.Sequence):
     def __init__(self, infile, batch_size, input_shape
                  , is_train= True, copy=False, rotate=False, polar=False, hiseq=False
-                 , gamma=False, flip=False, normal=False, invert=False):
+                 ,get_roi=False, gamma=False, flip=False, normal=False, invert=False):
         self.image = h5py.File(infile)['image']
         self.mask = h5py.File(infile)['mask']
         self.label = h5py.File(infile)['label']
@@ -32,6 +32,7 @@ class DataIterator(keras.utils.Sequence):
         self.rotate = rotate
         self.polar = polar
         self.hiseq = hiseq
+        self.get_roi = get_roi
         self.gamma = gamma
         self.flip = flip
         self.normal = normal
@@ -50,14 +51,14 @@ class DataIterator(keras.utils.Sequence):
             ## random한 각도로 image를 회전
             angle = random.randint(1,35)*10
             img = image_rotate(img, angle) if self.rotate else img 
-            mask = image_rotate(mask, angle) if self.rotate else mask
+            # mask = image_rotate(mask, angle) if self.rotate else mask
         
         ## get optic disk
-        img = crop_optic_disk(img, mask, margin=3)
+        # img = crop_optic_disk(img, mask, margin=3) if self.get_roi else img
         
         ## Polar Transform
-        angle = random.randint(1, 35)*10
-        img = polartransform_image(img, angle) if self.polar else img
+        # angle = random.randint(1, 35)*10
+        # img = polartransform_image(img, angle) if self.polar else img
         
         ## Adaptive_Histogram_Equalization
         img = Adaptive_Histogram_Equalization(img, cl=0.03) if self.hiseq else img

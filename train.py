@@ -75,7 +75,7 @@ BATCH_SIZE = 1
 model.compile(loss = loss_func, optimizer = optim, metrics = [monitors,sensitivity,specificity])
 model.summary()
 
-augm = {"gamma":True, "rotate":True, "polar":True, "hiseq":False, "normal":True, "flip":True, "copy":True}
+augm = {"gamma":True, "rotate":False, "polar":True, "hiseq":True, "normal":True, "flip":True, "copy":True}
 ## load batch generator
 print(f"\ntrain data from : {TRAIN_DATASET}")
 # train_iterator = DataIterator(TRAIN_IMAGE, MASK_LOC, BATCH_SIZE, IMAGE_SHAPE, OPTIC_DISC_SHAPE
@@ -96,7 +96,7 @@ test_iterator = DataIterator(TEST_DATASET, BATCH_SIZE, INPUT_IMAGE_SHAPE
 
 call_backs = [
     IntervalEvaluation(test_iterator, loss_func, monitor_name = monitors.__name__),
-    EarlyStopping(monitor=f'val_{monitors.__name__}', patience =5, verbose =1 , mode ='max'),
+#     EarlyStopping(monitor=f'val_{monitors.__name__}', patience =5, verbose =1 , mode ='max'),
     ModelCheckpoint(os.path.join(RESULT_PATH, "checkpoint-{epoch:03d}.h5"),
                     monitor=f'val_{monitors.__name__}', save_best_only=True, mode='max'),
     LearningRateScheduler(lr_scheduler, verbose=1),
@@ -132,7 +132,7 @@ with tf.device('/device:GPU:0'):
                                callbacks=call_backs,
                                class_weight=None,
                                max_queue_size=30,
-                               workers=4,
+                               workers=6,
                                use_multiprocessing=False,
                                initial_epoch=init_epoch,
                                shuffle =False
@@ -140,5 +140,6 @@ with tf.device('/device:GPU:0'):
                                # validation_steps=None,
                                )
 import pandas as pd
-print(pd.DataFrame(hist.history))
+hist = pd.DataFrame(hist.history)
+hist.to_csv(os.path.join(RESULT_PATH,"history.csv"))
 

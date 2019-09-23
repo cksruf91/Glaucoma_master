@@ -2,11 +2,17 @@ import os
 import h5py
 import pickle
 import numpy as np
+import argparse
 
 from config import *
 from utils.image_util import *
 from utils.util import print_progress
 
+def args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-t', '--test',action="store_true", help='test mode')  # number of class
+    args = parser.parse_args()
+    return args
     
 def preprocess(files):    
     image, mask, label, name = files
@@ -14,13 +20,14 @@ def preprocess(files):
     mask = image_loader(mask)
     
     ## resize
-    image = resize_image(image, (1634,1634,3))
-    mask = resize_image(mask, (1634,1634,3))
+    image = resize_image(image, (512,512,3)) # (1634,1634,3)
+    mask = resize_image(mask, (512,512,3))
 
-    mask = mask[:,:,0]
-    mask = np.where(mask<=0.3,0.0,mask)
-    mask = np.where(mask>0.3,1.0,mask)
-    mask = mask[:,:,np.newaxis]
+    image = polar(image, mask)
+    # mask = mask[:,:,0]
+    # mask = np.where(mask<=0.3,0.0,mask)
+    # mask = np.where(mask>0.3,1.0,mask)
+    # mask = mask[:,:,np.newaxis]
     
     return image,mask,label,name
 
@@ -79,5 +86,9 @@ def to_hdf5(copy, infile_dir, masking_dir, outfile, sample):
             la[i:(i+1)] = label
 
 if __name__ == "__main__":
-    to_hdf5(True, TRAIN_IMAGE, MASK_LOC, TRAIN_DATASET, None )
-    to_hdf5(False, TEST_IMAGE, MASK_LOC, TEST_DATASET, None )
+    testmode = 10 if args().test else None
+    
+    os.remove(TRAIN_DATASET)
+    to_hdf5(False, TRAIN_IMAGE, MASK_LOC, TRAIN_DATASET, testmode )
+    os.remove(TEST_DATASET)
+    to_hdf5(False, TEST_IMAGE, MASK_LOC, TEST_DATASET, testmode )

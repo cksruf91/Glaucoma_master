@@ -1,5 +1,6 @@
 import os
 import h5py
+import json
 import pickle
 import numpy as np
 import argparse
@@ -11,6 +12,7 @@ from utils.util import print_progress
 def args():
     parser = argparse.ArgumentParser()
     parser.add_argument('-t', '--test',action="store_true", help='test mode')  # number of class
+    parser.add_argument('-c', '--copy',action="store_true", help='copy mode')  # number of class
     args = parser.parse_args()
     return args
     
@@ -23,7 +25,7 @@ def preprocess(files):
     image = resize_image(image, (512,512,3)) # (1634,1634,3)
     mask = resize_image(mask, (512,512,3))
 
-    image = polar(image, mask)
+    image, mask = polar(image, mask)
     # mask = mask[:,:,0]
     # mask = np.where(mask<=0.3,0.0,mask)
     # mask = np.where(mask>0.3,1.0,mask)
@@ -86,9 +88,15 @@ def to_hdf5(copy, infile_dir, masking_dir, outfile, sample):
             la[i:(i+1)] = label
 
 if __name__ == "__main__":
+    
     testmode = 10 if args().test else None
+    copy = {"copy":args().copy}
+    
+    print(json.dumps(copy))
+    with open(os.path.join(RESULT_PATH,'train_options.json'), 'w') as f:
+        f.write(json.dumps(copy))
     
     os.remove(TRAIN_DATASET)
-    to_hdf5(False, TRAIN_IMAGE, MASK_LOC, TRAIN_DATASET, testmode )
+    to_hdf5(copy['copy'], TRAIN_IMAGE, MASK_LOC, TRAIN_DATASET, testmode )
     os.remove(TEST_DATASET)
     to_hdf5(False, TEST_IMAGE, MASK_LOC, TEST_DATASET, testmode )

@@ -79,7 +79,7 @@ class IntervalEvaluation(Callback):
         logs[f'val_{self.monitor_name}']  = monitor
         
         print(f" - val_loss : {loss:0.5f}  - val_{self.monitor_name} : {monitor:0.5f}")
-        conf_mat, sensitivity, specificity = confusion_matrix_report(y_true, y_pred,0.5)
+        conf_mat, sensitivity, specificity = confusion_matrix_report(y_true, y_pred)
         print(conf_mat)
         print(sensitivity , specificity)
         

@@ -10,15 +10,15 @@ from skimage.exposure import equalize_adapthist, adjust_gamma
 from skimage.transform import rescale, resize, downscale_local_mean, rotate
 
 from config import *
-from utils.image_util import image_loader, resize_image, image_rotate, random_gamma, Adaptive_Histogram_Equalization, random_flip_image, normalize_img, crop_optic_disk, polartransform_image, random_invert_image
-from utils.util import print_progress
+from utils.image_util import *
+from utils.util import pbar
 
 warnings.filterwarnings(action='ignore') 
         
 class DataIterator(keras.utils.Sequence):
     def __init__(self, infile, batch_size, input_shape
-                 , is_train= True, copy=False, rotate=False, polar=False, hiseq=False
-                 , gamma=False, flip=False, normal=False, invert=False):
+                 , is_train= True, copy=False, rotate=False, polar=False
+                 ,crop=False, gamma=False, flip=False, normal=False, invert=False):
         self.image = h5py.File(infile)['image']
         self.mask = h5py.File(infile)['mask']
         self.label = h5py.File(infile)['label']
@@ -31,7 +31,7 @@ class DataIterator(keras.utils.Sequence):
         
         self.rotate = rotate
         self.polar = polar
-        self.hiseq = hiseq
+        self.crop = crop
         self.gamma = gamma
         self.flip = flip
         self.normal = normal
@@ -46,32 +46,30 @@ class DataIterator(keras.utils.Sequence):
         return int(self.data_length / self.batch_size)
     
     def augmentation(self,img,mask,is_train):
+        
+        ## get optic disk
+        # img = crop_optic_disk(img, mask, margin=3) if self.get_roi else img
+        
+        ## Polar Transform
+        # angle = random.randint(1, 35)*10
+        # img = polartransform_image(img, angle) if self.polar else img
+        
+        ## Adaptive_Histogram_Equalization
+        # img = Adaptive_Histogram_Equalization(img, cl=0.03) if self.hiseq else img
+        
         if is_train:
             ## random한 각도로 image를 회전
             angle = random.randint(1,35)*10
             img = image_rotate(img, angle) if self.rotate else img 
-            mask = image_rotate(mask, angle) if self.rotate else mask
-        
-        ## get optic disk
-        img = crop_optic_disk(img, mask, margin=3)
-        
-        ## Polar Transform
-        angle = random.randint(1, 35)*10
-        img = polartransform_image(img, angle) if self.polar else img
-        
-        ## Adaptive_Histogram_Equalization
-        img = Adaptive_Histogram_Equalization(img, cl=0.03) if self.hiseq else img
-        
-        if is_train:
+            # mask = image_rotate(mask, angle) if self.rotate else masks
             ## random gamma
             img = random_gamma(img) if self.gamma else img 
-            
             ## 50% 확률로 이미지 상하 혹은 좌우 반전
-            h=random.choice([True, False])
-            v=random.choice([True, False])
-            img = random_flip_image(img, horizon = h, vertical = v) if self.flip else img 
+            img = random_flip_image(img, horizon = True, vertical = True) if self.flip else img 
             ## image invert
             img = random_invert_image(img) if self.invert else img
+            ## random crop
+            img = random_crop(img, None, 0.2) if self.crop else img
         
         ## image 정규화
         img = normalize_img(img) if self.normal else img 

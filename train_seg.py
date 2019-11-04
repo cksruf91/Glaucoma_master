@@ -13,8 +13,8 @@ from seg_iterator import DataIterator
 from utils.util import last_cheackpoint, get_config
 from callback_module import IntervalEvaluation, HistoryCheckpoint, SlackMessage
 
-print("tensorflow : ",tf.__version__)
-print("keras : ",keras.__version__)
+print("tensorflow : ", tf.__version__)
+print("keras : ", keras.__version__)
 
 """ metrics functions """
 def auc(y_true, y_pred):

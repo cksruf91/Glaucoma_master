@@ -1,9 +1,8 @@
 Glaucoma Master
 - - - 
-
 Glaucoma Diagnosis model
 
-## meta
+# 1. meta
 - Python 3.6.8
 - conda 4.6.14
 - tensorflow-gpu 1.13.1
@@ -16,14 +15,19 @@ Glaucoma Diagnosis model
 ## Train segmentation
 train segmentation model 
 
-```python
+```sh
 python train_seg.py
 ```
 you can test source code with -t option 
 (it will load small amount of data for testing)
-```python
+
+```sh
 python train_seg.py -t
 ```
+
+## test segmentation
+visualize segmentation image for vaildation 
+> test.ipynb
 
 ## Generate segmentation image 
 generate segmentation image by using trained model 
@@ -38,20 +42,22 @@ python mask_image_generator.py -m 0
 
 ## generate train/test dataset
 it will create hdf5 dataset, dataset stored preprocessed image for speed up training
-```python
+
+```sh
 python binary_dump.py
 python binary_dump.py -t # test mode
+python binary_dump.py -c # copy mode
 ```
+ - "copy mode" will copy Glaucoma image to balance Glaucoma and Non-Glaucoma image
+
 
 
 ## Train model
 train Diagnosis model 
 
-```python
+```sh
 python train.py
 ```
-
-
 ## Result 
 you can verify model performance in jupyter notebook
 > result.ipynb

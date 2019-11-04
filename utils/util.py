@@ -8,10 +8,43 @@ from sklearn.metrics import confusion_matrix
 from slacker import Slacker
 from config import *
 
-def last_cheackpoint(objectdir):
-    checkpoints = [i for i in os.listdir(objectdir) if 'checkpoint-' in i ]
-    checkpoints.sort(key = lambda s : os.path.getmtime(os.path.join(objectdir, s)))
-    return os.path.join(objectdir,checkpoints[-1])
+class printer():
+    def __init__(self, obj, total, bar_length, prefix):
+        self.idx = 0
+        self.obj = obj
+        self.total = total
+        self.bar_length = bar_length
+        self.prefix = prefix
+
+    def progressbar(self, total, i, bar_length, prefix):
+        dot_num = int(i/total*bar_length)
+        dot = '>'*dot_num
+        empty = '_'*(bar_length-dot_num)
+        sys.stdout.write(f'\r {prefix} [{dot}{empty}] {i/total*100:3.2f} % Done')
+        if i == total:
+            sys.stdout.write('\n')
+    
+    def __next__(self):
+        self.progressbar(self.total, self.idx, self.bar_length, self.prefix)
+        self.idx += 1
+        return next(self.obj)
+
+class pbar():
+    def __init__(self, iterable, bar_length=50, prefix=""):
+        self.iterable = iterable
+        self.total = len(self.iterable)
+        self.bar_length = bar_length
+        self.prefix = prefix
+    
+    def __iter__(self):
+        iterobj = iter(self.iterable)
+        return printer(iterobj, self.total, self.bar_length, self.prefix)
+    
+
+def last_cheackpoint(checkpoint_dir):
+    checkpoints = [i for i in os.listdir(checkpoint_dir) if 'checkpoint-' in i ]
+    checkpoints.sort(key = lambda s : os.path.getmtime(os.path.join(checkpoint_dir, s)))
+    return os.path.join(checkpoint_dir,checkpoints[-1])
 
 def get_config(obj):
     if hasattr(obj,"__class__")==False:
@@ -42,12 +75,12 @@ def confusion_matrix_report(y_true,y_pred,cut_off = None):
         cut_off = np.quantile(y_pred,0.9)
 #     print(f"cut_off : {cut_off:5}")
     tn, fp, fn, tp = confusion_matrix(y_true, y_pred>cut_off).ravel()
-    conf_mat = f"{cut_off:3.1f}{1:7},{0:7}\n{1:7}{tp:7},{fp:7}\n{0:7}{fn:7},{tn:7}"
+    conf_mat = f"{cut_off:0.5f}{1:7},{0:7}\n{1:7}{tp:7},{fp:7}\n{0:7}{fn:7},{tn:7}"
     sensitivity = f"Sensitivity : {tp/(tp+fn):1.5}"
     specificity = f"Specificity : {tn/(tn+fp):1.5}"
     return conf_mat, sensitivity, specificity
 
-def slack_message(chennel, message,token):
+def slack_message(chennel, message, token):
     slack = Slacker(token)
     slack.chat.post_message(chennel, message)
 
@@ -77,15 +110,6 @@ def visualize_anomaly(error_df, threshold = None):
     ax.hlines(threshold, ax.get_xlim()[0], ax.get_xlim()[1], 
               colors = 'r', zorder = 100, label = 'Threshold')
     ax.legend()
-    
-
-def print_progress(total, i, prefix=""):
-    dot_num = int(i/total*50)
-    dot = '>'*dot_num
-    empty = '_'*(50-dot_num)
-    sys.stdout.write(f'\r {prefix} [{dot}{empty}] {i} Done')
-    if i == total:
-        sys.stdout.write('\n')
         
 
 if __name__ == "__main__":

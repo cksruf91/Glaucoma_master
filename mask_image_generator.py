@@ -7,8 +7,8 @@ import sys
 import argparse
 import skimage
 
-from utils.image_util import image_loader, resize_image, image_rotate, random_gamma, Adaptive_Histogram_Equalization, random_flip_image, normalize_img, crop_optic_disk, opening_image, closing_image
-from utils.util import print_progress, last_cheackpoint
+from utils.image_util import *
+from utils.util import pbar, last_cheackpoint
 from config import *
 
 def args():
@@ -56,8 +56,8 @@ hiseq = train_options['augmemtation']['hiseq']
 normal = train_options['augmemtation']['normal']
 
 data = np.zeros((n_image,) +IMAGE_SHAPE)
-for i, file in enumerate(image_files):
-    print_progress(n_image, i+1, "loading...")
+for i, file in enumerate(pbar(image_files, prefix="loading...")):
+    #print_progress(n_image, i+1, "loading...")
     
     image = image_loader(file)
     image = resize_image(image,IMAGE_SHAPE)
@@ -81,7 +81,7 @@ y_pred = np.where(y_pred<0.3,0,y_pred)
 # mask = np.zeros((n_image,)+IMAGE_SHAPE)
 
 opensize = 10
-for idx in range(n_image):
+for idx in pbar(range(n_image), prefix="save..."):
     ## remove noise
     opened = opening_image(y_pred[idx], opensize)
     closed = closing_image(opened, opensize)
@@ -90,7 +90,7 @@ for idx in range(n_image):
     f = "mask_" + os.path.basename(image_files[idx])
     f = os.path.join(MASK_LOC, f)
     
-    print_progress(n_image, idx+1, "saveing..")
+    #print_progress(n_image, idx+1, "saveing..")
     
     mask = np.zeros(IMAGE_SHAPE)
     for i in range(3):

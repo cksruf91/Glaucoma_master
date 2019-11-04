@@ -13,7 +13,7 @@ from keras.utils import to_categorical
 
 from config import *
 from utils.image_util import *
-from utils.util import print_progress
+from utils.util import pbar
 
 warnings.filterwarnings(action='ignore') 
 
@@ -74,8 +74,8 @@ class DataIterator(keras.utils.Sequence):
     
     def preprocess(self,files):
         data = []
-        for i,(img, mask, name) in enumerate(files):
-            print_progress(self.total_length,i+1)
+        for i,(img, mask, name) in enumerate(pbar(files)):
+            #print_progress(self.total_length,i+1)
             image = image_loader(img)
             mask = image_loader(mask)
             

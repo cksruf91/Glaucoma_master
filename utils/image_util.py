@@ -17,15 +17,15 @@ def resize_image(img, shape, keeprange=False):
     return resize(img, shape, preserve_range=keeprange)
 
 def image_rotate(img, angle):
-    return rotate(img, angle,preserve_range=False)
+    return rotate(img, angle, preserve_range=False)
 
 def random_gamma(img):
     gamma = random.uniform(1.5,0.5)
-    gain = 1
-    return adjust_gamma(img,gamma, gain)
+    gain = random.uniform(1.5,0.5)
+    return adjust_gamma(img, gamma, gain)
 
 def random_invert_image(img):
-    iv=random.choice([True,False])
+    iv=random.choice([True, False])
     if iv:
         return invert(img)
     else:
@@ -37,18 +37,19 @@ def opening_image(img,size):
 #         zero[:,:,i] = opening(img[:,:,i], disk(size))
     return opening(img, disk(size))
 
-def closing_image(img,size):
+def closing_image(img, size):
 #     zero = np.zeros(img.shape)
 #     for i in range(img.shape[-1]):
 #         zero[:,:,i] = closing(img[:,:,i], disk(size))
     return closing(img, disk(size))
     
     
-def random_crop(img,mask, prop):
+def random_crop(img, mask=None, prop=0.2):
     ishape = img.shape
-    mshape = mask.shape
-    if ishape[:2] != mshape[:2]:
-        raise ValueError(f'image and maks is not same {ishape}, {mshape}')
+    if mask is not None:
+        mshape = mask.shape
+        if ishape[:2] != mshape[:2]:
+            raise ValueError(f'image and maks is not same {ishape}, {mshape}')
     h = int(ishape[0]*prop)
     h_crop1 = random.choice(range(h))
     h_crop2 = h - h_crop1
@@ -56,17 +57,14 @@ def random_crop(img,mask, prop):
     v_crop1 = random.choice(range(v))
     v_crop2 = v - v_crop1
     
-    img = resize_image(img[h_crop1:-h_crop2,v_crop1:-v_crop2,:],ishape)
-    mask = resize_image(mask[h_crop1:-h_crop2,v_crop1:-v_crop2,:],mshape)
-    
-    return img, mask
+    img = resize_image(img[h_crop1:-h_crop2,v_crop1:-v_crop2,:], ishape)
+    if mask is not None:
+        mask = resize_image(mask[h_crop1:-h_crop2,v_crop1:-v_crop2,:], mshape)
+        return img, mask
+    else :
+        return img
 
 def Adaptive_Histogram_Equalization(img,cl=0.03):
-#     clahe = cv2.createCLAHE(clipLimit=1, tileGridSize=(8,8))
-#     for i in range(3):
-#         ch = img[:,:,i]
-#         ch = clahe.apply(ch)
-#         img[:,:,i] = ch
     for i in range(3):
         ch = img[:,:,i]
         transformed = equalize_adapthist(ch,clip_limit=cl)
@@ -77,9 +75,11 @@ def random_flip_image(img, horizon=True,vertical=True):
     if img.ndim != 3:
         raise ValueError(f'exception flip_image: expected dim 3 but got {train_images[0].ndim}')
     if horizon:
-        img = np.flip(img,0)
+        if random.choice([True, False]):
+            img = np.flip(img,0)
     if vertical:
-        img = np.flip(img,1)
+        if random.choice([True, False]):
+            img = np.flip(img,1)
     return img
 
 def normalize_img(img):
@@ -122,10 +122,10 @@ def polartransform_image(img,angle):
     img = img.transpose(1,0,2)
     return np.clip(img,0,1)
 
-def polar(img,mask):
+def polar(img, mask):
     
     for angle in range(0,360,10):
-        test = polartransform_image(mask,angle)
+        test = polartransform_image(mask, angle)
         test = test.max(axis=0).max(-1) > 0.5
         trim = int(test.shape[0]*.3/2)
         test = np.concatenate([test[:trim],test[:trim]])
@@ -133,7 +133,7 @@ def polar(img,mask):
             break
     
     transfrom_im = polartransform_image(img,angle)
+    transfrom_mk = polartransform_image(mask,angle)
     trim = int(transfrom_im.shape[0]/3)
     
-    return transfrom_im[:-trim,:,:]
-    
+    return transfrom_im[:-trim,:,:], transfrom_mk[:-trim,:,:]

@@ -24,5 +24,5 @@ LABEL = {'Glaucoma': 1., 'Non-Glaucoma': 0.}
 # h,w, chennel
 IMAGE_SHAPE = (256, 256, 3) 
 # orignal size (2056, 2124, 3)
-INPUT_IMAGE_SHAPE = (299,398,3)
+INPUT_IMAGE_SHAPE = (256,512,3)
 # (299, 299, 3)

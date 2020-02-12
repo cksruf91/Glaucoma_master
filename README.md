@@ -41,7 +41,7 @@ python mask_image_generator.py -m 0
 	- 0: test image
 
 ## generate train/test dataset
-it will create hdf5 dataset, dataset stored preprocessed image for speed up training
+it will create hdf5 dataset, dataset will store preprocessed image for speed up training
 
 ```sh
 python binary_dump.py
@@ -49,7 +49,6 @@ python binary_dump.py -t # test mode
 python binary_dump.py -c # copy mode
 ```
  - "copy mode" will copy Glaucoma image to balance Glaucoma and Non-Glaucoma image
-
 
 
 ## Train model
